@@ -1,10 +1,32 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <link rel="manifest" href="/manifest.json" />
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maxiumum-scale=1, user-scalable=no, viewport-fit-cover" />
     <title>Vite + React</title>
+    <style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    overflow-x: hidden; /* stops sideways scrolling */
+    background: #111;   /* same as your app background */
+  }
+  :root {
+  --app-height: 100%;
+  }
+  #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: var(--app-height);
+    overflow: hidden;
+    background: #111;
+  }
+</style>
   </head>
   <body>
     <div id="root"></div>

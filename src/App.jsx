@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useSwipeable } from "react-swipeable";
 
-// ---------- localStorage helpers ----------
+/* ---------- localStorage helpers ---------- */
 function loadLS(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
@@ -14,40 +14,61 @@ function saveLS(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-// ---------- seed data ----------
+/* ---------- seed data (used only on first run) ---------- */
 const sampleExercises = [
   { id: "deadlift", name: "Deadlift", muscle: "Posterior chain", history: [] },
   { id: "squat", name: "Back Squat", muscle: "Quads/Glutes", history: [] },
   { id: "bench", name: "Bench Press", muscle: "Chest/Triceps", history: [] },
 ];
 
-// ---------- main app ----------
+const LS_KEYS = {
+  exercises: "swipelift.exercises",
+  deck: "swipelift.deck",
+};
+
+/* ---------- main app ---------- */
 export default function App() {
+    useEffect(() => {
+    const setAppHeight = () => {
+      document.documentElement.style.setProperty(
+        "--app-height",
+        `${window.innerHeight}px`
+      );
+    };
+    setAppHeight();
+    window.addEventListener("resize", setAppHeight);
+    return () => window.removeEventListener("resize", setAppHeight);
+  }, []);
+  // Persisted state (loads once from LS, saves on change)
   const [exercises, setExercises] = useState(() =>
-    loadLS("swipelift.exercises", sampleExercises)
+    loadLS(LS_KEYS.exercises, sampleExercises)
   );
   const [deck, setDeck] = useState(() =>
     loadLS(
-      "swipelift.deck",
+      LS_KEYS.deck,
       sampleExercises.map((e) => e.id)
     )
   );
+
+  // UI state
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // modal state (opens on right-swipe)
+  // Modal for logging AFTER right-swipe
   const [modalOpen, setModalOpen] = useState(false);
   const [modalExercise, setModalExercise] = useState(null);
   const [weight, setWeight] = useState("");
   const [reps, setReps] = useState("");
   const [notes, setNotes] = useState("");
 
-  // simple drag visuals for the top card
+  // Simple swipe visuals
   const [dragX, setDragX] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
 
-  useEffect(() => saveLS("swipelift.exercises", exercises), [exercises]);
-  useEffect(() => saveLS("swipelift.deck", deck), [deck]);
+  // Persist on change
+  useEffect(() => saveLS(LS_KEYS.exercises, exercises), [exercises]);
+  useEffect(() => saveLS(LS_KEYS.deck, deck), [deck]);
 
+  // Current card
   const currentId = deck[0];
   const current = exercises.find((e) => e.id === currentId) || null;
 
@@ -57,11 +78,11 @@ export default function App() {
     return h.length ? h[h.length - 1] : null;
   }, [current]);
 
-  // ----- swipe handlers -----
+  /* ---------- swipe handlers ---------- */
   const handlers = useSwipeable({
     onSwipedLeft: () => {
       if (!current) return;
-      // skip → reinsert after 4
+      // Skip → reinsert 4 places later
       const rest = deck.slice(1);
       const offset = Math.min(4, rest.length);
       const newDeck = [...rest];
@@ -72,10 +93,9 @@ export default function App() {
     },
     onSwipedRight: () => {
       if (!current) return;
-      // open modal, DO NOT finalize until Save/Cancel
+      // Open modal (pause the swipe) — do not move card yet
       setModalExercise(current);
       setModalOpen(true);
-      // snap back (swipe is "paused")
       setDragX(0);
       setIsDragging(false);
     },
@@ -87,9 +107,10 @@ export default function App() {
       setIsDragging(false);
       setDragX(0);
     },
-    trackMouse: true, // allow mouse dragging on desktop
+    trackMouse: true, // enables mouse dragging on desktop
   });
 
+  /* ---------- logging ---------- */
   function saveLog() {
     if (!modalExercise) return;
     const entry = {
@@ -98,20 +119,21 @@ export default function App() {
       reps: reps ? Number(reps) : undefined,
       notes: notes || undefined,
     };
+    // Update exercise history
     const updated = exercises.map((e) =>
       e.id === modalExercise.id ? { ...e, history: [...e.history, entry] } : e
     );
     setExercises(updated);
 
-    // send card to the back after logging
+    // After logging, send the card to the back
     setDeck((d) => [...d.slice(1), modalExercise.id]);
 
-    // reset modal state
-    closeModal(true);
+    // Reset modal
+    closeModal(true); // snapBackOnly=true just clears fields
   }
 
   function closeModal(snapBackOnly = false) {
-    // If cancel: snap card back to the front (do not move it)
+    // If cancel (snapBackOnly=false): put card back at the front (no movement)
     if (!snapBackOnly && modalExercise) {
       setDeck((d) => [modalExercise.id, ...d.slice(1)]);
     }
@@ -119,16 +141,16 @@ export default function App() {
     setModalExercise(null);
     setWeight("");
     setReps("");
-    setRpe("");
     setNotes("");
   }
 
+  /* ---------- exercise mgmt ---------- */
   function addExercise(name, muscle) {
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-    if (exercises.some((e) => e.id === id)) return;
+    if (!id || exercises.some((e) => e.id === id)) return;
     const ex = { id, name, muscle, history: [] };
     setExercises((arr) => [...arr, ex]);
-    setDeck((d) => [...d, id]);
+    setDeck((d) => [...d, id]); // new cards go to the back
   }
 
   function removeExercise(id) {
@@ -136,28 +158,39 @@ export default function App() {
     setDeck((d) => d.filter((x) => x !== id));
   }
 
+  /* ---------- UI ---------- */
   return (
-    <div style={{ fontFamily: "system-ui, Arial, sans-serif", height: "100vh", overflow: "hidden", background: "#111", color: "#fff" }}>
-      {/* Hamburger */}
+    <div
+      style={{
+        fontFamily: "system-ui, Arial, sans-serif",
+        height: "var(--app-height)",
+        width: "100vw",
+        overflow: "hidden",
+        overflowY: "hidden",
+        background: "#111",
+        color: "#fff",
+      }}
+    >
+      {/* Hamburger (centered icon) */}
       <button
         onClick={() => setMenuOpen((o) => !o)}
         style={{
-  position: "absolute",
-  top: 12,
-  left: 12,
-  zIndex: 20,
-  width: 40,
-  height: 40,
-  borderRadius: 8,
-  border: "1px solid #333",
-  background: "#1c1c1c",
-  color: "#fff",
-  cursor: "pointer",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  fontSize: 20,
-}}
+          position: "absolute",
+          top: 12,
+          left: 12,
+          zIndex: 20,
+          width: 40,
+          height: 40,
+          borderRadius: 8,
+          border: "1px solid #333",
+          background: "#1c1c1c",
+          color: "#fff",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 20,
+        }}
         aria-label="Menu"
       >
         ☰
@@ -175,12 +208,12 @@ export default function App() {
             background: "#1b1b1b",
             borderRight: "1px solid #333",
             zIndex: 15,
-            padding: "16px",
+            padding: 16,
             overflowY: "auto",
           }}
         >
-          <h3 style={{ marginTop: 0 }}>Your exercises</h3>
-          <ul style={{ paddingLeft: 18 }}>
+          <h3 style={{ marginTop: 0, marginLeft: 60 }}>Your exercises</h3>
+          <ul style={{ paddingLeft: 60 }}>
             {exercises.map((e) => (
               <li key={e.id} style={{ marginBottom: 6 }}>
                 {e.name}{" "}
@@ -198,7 +231,15 @@ export default function App() {
       )}
 
       {/* Card area */}
-      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center", padding: "64px 16px" }}>
+      <div
+        style={{
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "64px 16px",
+        }}
+      >
         {current ? (
           <div
             {...handlers}
@@ -230,7 +271,7 @@ export default function App() {
               <strong>Previous:</strong>{" "}
               {lastSet ? (
                 <div style={{ marginTop: 6 }}>
-                 {lastSet.weight ?? "—"} kg × {lastSet.reps ?? "—"} reps
+                  {lastSet.weight ?? "—"} kg × {lastSet.reps ?? "—"} reps
                   <div style={{ opacity: 0.6, fontSize: 12, marginTop: 4 }}>
                     {new Date(lastSet.date).toLocaleString()}
                   </div>
@@ -254,7 +295,7 @@ export default function App() {
         )}
       </div>
 
-      {/* Logging Modal */}
+      {/* Logging Modal (no RPE) */}
       {modalOpen && (
         <div
           style={{
@@ -290,9 +331,10 @@ export default function App() {
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button
                 onClick={() => {
-                  // cancel → snap back (do not move card)
-                  // keep card at front
-                  setDeck((d) => [modalExercise.id, ...d.slice(1)]);
+                  // Cancel → keep card at front (undo the swipe)
+                  if (modalExercise) {
+                    setDeck((d) => [modalExercise.id, ...d.slice(1)]);
+                  }
                   closeModal(false);
                 }}
                 style={{
@@ -330,7 +372,7 @@ export default function App() {
   );
 }
 
-// ---------- small components ----------
+/* ---------- small components ---------- */
 function Input({ label, value, onChange }) {
   return (
     <label style={{ display: "block", marginTop: 10 }}>
